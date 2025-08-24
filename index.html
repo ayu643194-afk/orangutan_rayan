@@ -1,40 +1,148 @@
-async function initializeModels() {
-  const apiKey = document.getElementById('apiKey').value.trim();
-  const modelSelect = document.getElementById('model');
-  modelSelect.innerHTML = '';
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>🎬 Veo 3 Video Generator</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+    label { display: block; margin-top: 10px; }
+    textarea, input, select, button { width: 100%; padding: 8px; margin-top: 4px; }
+    button { cursor: pointer; }
+    .status { margin-top: 10px; font-weight: bold; color: #333; }
+    video { margin-top: 20px; max-width: 100%; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h2>🎬 Veo 3 Video Generator</h2>
 
-  if (!apiKey) {
-    alert('Isi API Key dulu untuk cek model tersedia.');
-    return;
-  }
+  <label>API Key Gemini:</label>
+  <input type="text" id="apiKey" placeholder="Masukkan API Key di sini..." />
 
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-    const data = await res.json();
-    const valid = [
-      'veo-2.0-generate-001',
-      'veo-3.0-generate-001',
-      'veo-3.0-fast-generate-001',
-      'veo-3.0-generate-preview',
-      'veo-3.0-fast-generate-preview'
-    ];
-    data.models.forEach(m => {
-      const name = m.name.split('/')[1];
-      if (valid.includes(name)) {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        modelSelect.appendChild(opt);
+  <button onclick="initializeModels()">↻ Muat Model Veo 3</button>
+
+  <label>Pilih Model:</label>
+  <select id="model">
+    <option value="">— Silakan klik "Muat Model" —</option>
+  </select>
+
+  <label>Prompt:</label>
+  <textarea id="prompt" rows="4" placeholder="Tulis deskripsi video..."></textarea>
+
+  <label>Durasi (detik):</label>
+  <input type="number" id="duration" value="8" />
+
+  <label>Aspect Ratio:</label>
+  <select id="ratio">
+    <option value="16:9">16:9</option>
+    <option value="9:16">9:16</option>
+    <option value="1:1">1:1</option>
+  </select>
+
+  <label>Resolusi:</label>
+  <select id="resolution">
+    <option value="720p">720p</option>
+    <option value="1080p" selected>1080p</option>
+    <option value="4k">4K</option>
+  </select>
+
+  <button onclick="generateVideo()">🚀 Generate Video</button>
+
+  <div id="status" class="status"></div>
+  <video id="video" controls></video>
+
+  <script>
+    async function initializeModels() {
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const modelSelect = document.getElementById('model');
+      modelSelect.innerHTML = '';
+
+      if (!apiKey) {
+        alert('Isi API Key dulu untuk cek model tersedia.');
+        return;
       }
-    });
-    if (!modelSelect.options.length) {
-      const opt = document.createElement('option');
-      opt.value = '';
-      opt.textContent = '— Tidak ada model Veo 3 tersedia —';
-      modelSelect.appendChild(opt);
+
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        const data = await res.json();
+        const valid = [
+          'veo-2.0-generate-001',
+          'veo-3.0-generate-001',
+          'veo-3.0-fast-generate-001',
+          'veo-3.0-generate-preview',
+          'veo-3.0-fast-generate-preview'
+        ];
+        data.models.forEach(m => {
+          const name = m.name.split('/')[1];
+          if (valid.includes(name)) {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            modelSelect.appendChild(opt);
+          }
+        });
+        if (!modelSelect.options.length) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = '— Tidak ada model Veo 3 tersedia —';
+          modelSelect.appendChild(opt);
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Gagal memuat model: ' + err.message);
+      }
     }
-  } catch (err) {
-    console.error(err);
-    alert('Gagal memuat model: ' + err.message);
-  }
-}
+
+    async function generateVideo() {
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const model = document.getElementById('model').value;
+      const prompt = document.getElementById('prompt').value.trim();
+      const duration = parseInt(document.getElementById('duration').value);
+      const ratio = document.getElementById('ratio').value;
+      const resolution = document.getElementById('resolution').value;
+
+      const statusEl = document.getElementById('status');
+      const videoEl = document.getElementById('video');
+      statusEl.textContent = '';
+      videoEl.src = '';
+
+      if (!apiKey || !model || !prompt) {
+        alert('Isi semua field dengan benar.');
+        return;
+      }
+
+      try {
+        statusEl.textContent = '⏳ Mengirim request ke Gemini...';
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt,
+              durationSeconds: duration,
+              aspectRatio: ratio,
+              resolution,
+            })
+          }
+        );
+        const data = await res.json();
+        if (data.error) {
+          throw new Error(JSON.stringify(data.error));
+        }
+
+        statusEl.textContent = '✅ Berhasil! Memuat video...';
+        if (data.videoUri) {
+          videoEl.src = data.videoUri;
+        } else if (data.output && data.output[0].video) {
+          videoEl.src = data.output[0].video.uri;
+        } else {
+          statusEl.textContent = '⚠️ Tidak ada URL video dalam respons.';
+        }
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Gagal: ' + err.message;
+      }
+    }
+  </script>
+</body>
+</html>
