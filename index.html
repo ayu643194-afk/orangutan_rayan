@@ -1,253 +1,410 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prompt Generator Orangutan Studio</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-        .output-box {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        .copy-btn-icon {
-            width: 16px;
-            height: 16px;
-            stroke-width: 2;
-        }
-    </style>
-</head>
-<body class="bg-gray-900 text-white antialiased">
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-    <div class="container mx-auto px-4 py-8 md:py-12">
-        
-        <!-- Header -->
-        <header class="text-center mb-8 md:mb-12">
-            <h1 class="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500">
-                VEO Prompt Generator
-            </h1>
-            <p class="mt-2 text-gray-400 max-w-2xl mx-auto">
-                Buat prompt video yang detail dan terstruktur untuk VEO dengan mudah. Isi formulir di bawah ini dan dapatkan output dalam format Teks, JSON, dan YAML.
-            </p>
+/**
+
+Veo 3 Video Generator — Full Stack Template
+
+
+---
+
+What you get:
+
+1. Frontend (this React component): a clean UI with an API Key field,
+
+
+
+prompt input, model options, progress, preview, and download.
+
+2. Backend (Node.js/Express) code is included below as a code block
+
+
+
+string you can copy into server.js. It exposes routes:
+
+- POST /api/generate   -> starts a video job
+
+- GET  /api/status/:id -> polls job status
+
+- GET  /api/file/:id   -> streams the finished video
+
+Why a backend? Veo 3 currently requires a server-side call. Putting your
+
+key directly in the browser can expose it and also run into CORS limits.
+
+This template keeps the API key in the browser but **sends it to your own
+
+backend per request**, so you can rotate/validate it, or replace with
+
+service-account auth later without touching the UI.
+
+Hook up the backend, deploy both together, and you're good.\n
+
+NOTE: The backend includes a minimal stub for Veo 3. Replace the marked
+
+TODO section with the actual call to your chosen Veo 3 endpoint (Vertex AI
+
+or Gemini API) and map responses to the unified shape used here. */
+
+
+// ---------- Simple UI Primitives ---------- const Label = ({ htmlFor, children }) => ( <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-700 mb-1"> {children} </label> );
+
+const Input = (props) => ( <input {...props} className={"w-full rounded-2xl border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-black/10 shadow-sm " + (props.className || "")} /> );
+
+const Textarea = (props) => (
+
+  <textarea
+    {...props}
+    className={"w-full rounded-2xl border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-black/10 shadow-sm min-h-[120px] " +
+      (props.className || "")}
+  />
+);
+
+const Select = (props) => (
+  <select
+    {...props}
+    className={"w-full rounded-2xl border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-black/10 shadow-sm bg-white " +
+      (props.className || "")}
+  />
+);
+
+const Button = ({ children, className = "", ...props }) => (
+  <button
+    {...props}
+    className={`rounded-2xl px-4 py-2 font-medium shadow-sm border border-black/10 hover:shadow transition ${className}`}
+  >
+    {children}
+  </button>
+);
+
+const Card = ({ children, className = "" }) => (
+  <div className={`rounded-3xl border border-black/10 p-5 shadow-sm bg-white ${className}`}>{children}</div>
+);
+
+// ---------- Helpers ----------
+const prettyBytes = (bytes) => {
+  if (!Number.isFinite(bytes)) return "-";
+  const units = ["B", "KB", "MB", "GB"]; let i = 0;
+  while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+  return `${bytes.toFixed(1)} ${units[i]}`;
+};
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---------- Main Component ----------
+export default function App() {
+  const [apiKey, setApiKey] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [negativePrompt, setNegativePrompt] = useState("");
+  const [duration, setDuration] = useState(5);
+  const [aspect, setAspect] = useState("9:16");
+  const [seed, setSeed] = useState(0);
+  const [guidance, setGuidance] = useState(7.5);
+  const [model, setModel] = useState("veo-3");
+
+  const [jobId, setJobId] = useState(null);
+  const [status, setStatus] = useState("idle"); // idle | queued | running | done | error
+  const [progress, setProgress] = useState(0); // 0..100
+  const [error, setError] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [meta, setMeta] = useState(null);
+
+  const canGenerate = apiKey && prompt && status !== "running" && status !== "queued";
+
+  const handleGenerate = useCallback(async () => {
+    setError("");
+    setStatus("queued");
+    setProgress(1);
+    setVideoUrl("");
+    setMeta(null);
+
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiKey,
+          model,
+          prompt,
+          negativePrompt,
+          durationSeconds: Number(duration),
+          aspectRatio: aspect,
+          seed: Number(seed) || 0,
+          guidanceScale: Number(guidance) || 7.5,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`Generate failed: ${res.status}`);
+      const data = await res.json();
+      setJobId(data.jobId);
+      setStatus("running");
+      setProgress(5);
+
+      // Poll
+      let done = false;
+      let lastPct = 5;
+      while (!done) {
+        const s = await fetch(`/api/status/${encodeURIComponent(data.jobId)}`);
+        if (!s.ok) throw new Error(`Status failed: ${s.status}`);
+        const state = await s.json();
+        setStatus(state.status);
+        setProgress(state.progress ?? lastPct);
+        lastPct = state.progress ?? lastPct;
+        setMeta(state.meta || null);
+        if (state.status === "done") {
+          done = true;
+          setProgress(100);
+          break;
+        }
+        if (state.status === "error") {
+          throw new Error(state.error || "Unknown job error");
+        }
+        await sleep(2000);
+      }
+
+      const f = await fetch(`/api/file/${encodeURIComponent(data.jobId)}`);
+      if (!f.ok) throw new Error(`Download failed: ${f.status}`);
+      const blob = await f.blob();
+      const url = URL.createObjectURL(blob);
+      setVideoUrl(url);
+    } catch (e) {
+      console.error(e);
+      setError(e.message || String(e));
+      setStatus("error");
+    }
+  }, [apiKey, model, prompt, negativePrompt, duration, aspect, seed, guidance]);
+
+  const reset = useCallback(() => {
+    setJobId(null);
+    setStatus("idle");
+    setProgress(0);
+    setVideoUrl("");
+    setError("");
+    setMeta(null);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white p-6">
+      <div className="mx-auto max-w-5xl space-y-6">
+        <header className="flex items-center justify-between">
+          <h1 className="text-2xl md:text-3xl font-bold">Veo 3 Video Generator</h1>
+          <div className="text-sm text-gray-500">Single-file app • API Key ready</div>
         </header>
 
-        <main class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
-            <!-- Input Section -->
-            <div class="bg-gray-800 p-6 rounded-xl shadow-lg">
-                <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Detail Prompt</h2>
-                <form id="prompt-form" class="space-y-4">
-                    
-                    <div>
-                        <label for="main-prompt" class="block text-sm font-medium text-gray-300 mb-1">Ide Utama</label>
-                        <textarea id="main-prompt" rows="4" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" placeholder="Contoh: Seekor astronot menunggang kuda di Mars"></textarea>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="style" class="block text-sm font-medium text-gray-300 mb-1">Gaya Visual</label>
-                            <input type="text" id="style" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" placeholder="Contoh: Cinematic, 8K, photorealistic">
-                        </div>
-                        <div>
-                            <label for="format" class="block text-sm font-medium text-gray-300 mb-1">Format</label>
-                            <input type="text" id="format" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" placeholder="Contoh: Timelapse, slow motion">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="aspect-ratio" class="block text-sm font-medium text-gray-300 mb-1">Aspek Rasio</label>
-                            <select id="aspect-ratio" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
-                                <option>16:9 (Widescreen)</option>
-                                <option>9:16 (Vertical)</option>
-                                <option>1:1 (Square)</option>
-                                <option>4:3 (Standard)</option>
-                                <option>21:9 (Cinematic)</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="duration" class="block text-sm font-medium text-gray-300 mb-1">Durasi</label>
-                            <input type="text" id="duration" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" placeholder="Contoh: 10 detik">
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <label for="camera-movement" class="block text-sm font-medium text-gray-300 mb-1">Gerakan Kamera</label>
-                        <input type="text" id="camera-movement" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" placeholder="Contoh: Drone shot, panning shot">
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="flex flex-col sm:flex-row gap-4 pt-4">
-                        <button type="button" id="generate-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300">
-                            Generate Prompt
-                        </button>
-                        <button type="button" id="reset-btn" class="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300">
-                            Reset
-                        </button>
-                    </div>
-                </form>
+        <Card>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
+              <Label htmlFor="apiKey">API Key</Label>
+              <Input
+                id="apiKey"
+                type="password"
+                placeholder="paste your key here"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                autoComplete="off"
+              />
             </div>
-
-            <!-- Output Section -->
-            <div class="bg-gray-800 p-6 rounded-xl shadow-lg space-y-6">
-                <!-- Generated Prompt -->
-                <div>
-                    <div class="flex justify-between items-center mb-2">
-                        <h3 class="text-lg font-semibold">Hasil Prompt</h3>
-                        <button onclick="copyToClipboard('prompt-output')" class="copy-btn flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-sm font-medium py-1 px-3 rounded-md transition-colors">
-                            <svg class="copy-btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                            <span class="copy-btn-text">Salin</span>
-                        </button>
-                    </div>
-                    <pre id="prompt-output" class="output-box w-full bg-gray-900 p-4 rounded-lg text-gray-300 min-h-[100px]">Hasil prompt akan muncul di sini...</pre>
-                </div>
-                
-                <!-- JSON Output -->
-                <div>
-                     <div class="flex justify-between items-center mb-2">
-                        <h3 class="text-lg font-semibold">Format JSON</h3>
-                        <button onclick="copyToClipboard('json-output')" class="copy-btn flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-sm font-medium py-1 px-3 rounded-md transition-colors">
-                            <svg class="copy-btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                            <span class="copy-btn-text">Salin</span>
-                        </button>
-                    </div>
-                    <pre id="json-output" class="output-box w-full bg-gray-900 p-4 rounded-lg text-gray-300 min-h-[100px]">Output JSON akan muncul di sini...</pre>
-                </div>
-
-                <!-- YAML Output -->
-                <div>
-                    <div class="flex justify-between items-center mb-2">
-                        <h3 class="text-lg font-semibold">Format YAML</h3>
-                         <button onclick="copyToClipboard('yaml-output')" class="copy-btn flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-sm font-medium py-1 px-3 rounded-md transition-colors">
-                            <svg class="copy-btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                            <span class="copy-btn-text">Salin</span>
-                        </button>
-                    </div>
-                    <pre id="yaml-output" class="output-box w-full bg-gray-900 p-4 rounded-lg text-gray-300 min-h-[100px]">Output YAML akan muncul di sini...</pre>
-                </div>
+            <div>
+              <Label htmlFor="model">Model</Label>
+              <Select id="model" value={model} onChange={(e) => setModel(e.target.value)}>
+                <option value="veo-3">veo-3</option>
+                <option value="veo-3-creative">veo-3-creative</option>
+                <option value="veo-3-fast">veo-3-fast</option>
+              </Select>
             </div>
-        </main>
-    </div>
+            <div className="md:col-span-2">
+              <Label htmlFor="prompt">Prompt</Label>
+              <Textarea
+                id="prompt"
+                placeholder="Describe the video you want (Bahasa Indonesia juga bisa)"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label htmlFor="negative">Negative Prompt (optional)</Label>
+              <Input id="negative" value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="things to avoid" />
+            </div>
+            <div>
+              <Label htmlFor="duration">Duration (sec)</Label>
+              <Input id="duration" type="number" min={1} max={60} value={duration} onChange={(e) => setDuration(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="aspect">Aspect Ratio</Label>
+              <Select id="aspect" value={aspect} onChange={(e) => setAspect(e.target.value)}>
+                <option value="9:16">9:16 (Shorts/TikTok)</option>
+                <option value="16:9">16:9 (Landscape)</option>
+                <option value="1:1">1:1 (Square)</option>
+                <option value="4:5">4:5 (Portrait)</option>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="seed">Seed</Label>
+              <Input id="seed" type="number" value={seed} onChange={(e) => setSeed(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="guidance">Guidance Scale</Label>
+              <Input id="guidance" type="number" step="0.1" min={1} max={20} value={guidance} onChange={(e) => setGuidance(e.target.value)} />
+            </div>
+          </div>
 
-    <script>
-        // Ambil elemen dari DOM
-        const generateBtn = document.getElementById('generate-btn');
-        const resetBtn = document.getElementById('reset-btn');
-        const form = document.getElementById('prompt-form');
+          <div className="mt-4 flex items-center gap-3">
+            <Button onClick={handleGenerate} disabled={!canGenerate} className={`bg-black text-white ${!canGenerate ? "opacity-50 cursor-not-allowed" : ""}`}>
+              {status === "running" || status === "queued" ? "Generating…" : "Generate"}
+            </Button>
+            <Button onClick={reset} className="bg-white">Reset</Button>
+            {error && <span className="text-sm text-red-600">{error}</span>}
+          </div>
 
-        const mainPromptEl = document.getElementById('main-prompt');
-        const styleEl = document.getElementById('style');
-        const formatEl = document.getElementById('format');
-        const aspectRatioEl = document.getElementById('aspect-ratio');
-        const durationEl = document.getElementById('duration');
-        const cameraMovementEl = document.getElementById('camera-movement');
+          <div className="mt-6">
+            <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-black/80" style={{ width: `${progress}%` }} />
+            </div>
+            <div className="mt-2 text-sm text-gray-600 flex items-center justify-between">
+              <span>Status: {status}</span>
+              {meta?.compute && (
+                <span>Compute: {meta.compute} • Frames: {meta.frames} • Est: {meta.etaSec}s</span>
+              )}
+            </div>
+          </div>
+        </Card>
 
-        const promptOutputEl = document.getElementById('prompt-output');
-        const jsonOutputEl = document.getElementById('json-output');
-        const yamlOutputEl = document.getElementById('yaml-output');
+        <Card>
+          <h2 className="text-lg font-semibold mb-3">Result</h2>
+          {videoUrl ? (
+            <div className="space-y-3">
+              <video src={videoUrl} controls className="w-full rounded-2xl" />
+              <div className="flex gap-3">
+                <a href={videoUrl} download={`veo3_${jobId || "video"}.mp4`}>
+                  <Button className="bg-black text-white">Download MP4</Button>
+                </a>
+                <Button onClick={() => { navigator.clipboard.writeText(prompt); }} className="bg-white">Copy Prompt</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500">No video yet. Fill the form and press Generate.</div>
+          )}
+        </Card>
 
-        /**
-         * Fungsi untuk menghasilkan prompt, JSON, dan YAML
-         */
-        function generateOutputs() {
-            // Kumpulkan nilai dari input
-            const promptData = {
-                mainPrompt: mainPromptEl.value.trim(),
-                style: styleEl.value.trim(),
-                format: formatEl.value.trim(),
-                aspectRatio: aspectRatioEl.value,
-                duration: durationEl.value.trim(),
-                cameraMovement: cameraMovementEl.value.trim()
-            };
+        <Card>
+          <h3 className="font-semibold mb-2">How to run</h3>
+          <ol className="list-decimal ml-5 space-y-1 text-sm text-gray-700">
+            <li>Create a new project folder and run <code>npm init -y</code></li>
+            <li>Install deps: <code>npm i express node-fetch@3</code></li>
+            <li>Create <code>server.js</code> using the code below, then <code>node server.js</code></li>
+            <li>Serve this React app with any dev server (Vite/Next) or export to static and proxy to <code>http://localhost:8787</code> (default)</li>
+            <li>Paste your API key in the UI. Hit Generate.</li>
+          </ol>
+        </Card>
 
-            // Validasi: Pastikan ide utama diisi
-            if (!promptData.mainPrompt) {
-                promptOutputEl.textContent = "Harap isi 'Ide Utama' terlebih dahulu.";
-                jsonOutputEl.textContent = "";
-                yamlOutputEl.textContent = "";
-                return;
-            }
+        <Card>
+          <h3 className="font-semibold mb-2">Backend (server.js)</h3>
+          <pre className="whitespace-pre-wrap text-xs bg-gray-50 p-4 rounded-2xl border border-gray-200 overflow-auto">
+{`
+/**
+ * Minimal Veo 3 proxy for browser apps
+ * ------------------------------------
+ * This Express server receives an API key from the client PER REQUEST and
+ * calls your Veo 3 endpoint. Replace the marked TODO with the real call and
+ * normalize the response to the unified shapes below.
+ *
+ * Start:   node server.js
+ */
 
-            // Buat prompt teks lengkap
-            let fullPrompt = promptData.mainPrompt;
-            if (promptData.style) fullPrompt += `, ${promptData.style}`;
-            if (promptData.format) fullPrompt += `, ${promptData.format}`;
-            if (promptData.cameraMovement) fullPrompt += `, ${promptData.cameraMovement}`;
-            if (promptData.duration) fullPrompt += `, durasi ${promptData.duration}`;
-            fullPrompt += `, aspek rasio ${promptData.aspectRatio}`;
-            
-            promptOutputEl.textContent = fullPrompt;
+import express from 'express';
+import fetch from 'node-fetch';
 
-            // Buat output JSON
-            jsonOutputEl.textContent = JSON.stringify(promptData, null, 2);
+const app = express();
+app.use(express.json({ limit: '2mb' }));
 
-            // Buat output YAML
-            let yamlString = `prompt_details:\n`;
-            for (const key in promptData) {
-                if (promptData[key]) {
-                    yamlString += `  ${key}: ${promptData[key]}\n`;
-                }
-            }
-            yamlOutputEl.textContent = yamlString;
+// In-memory job store for demo
+const jobs = new Map();
+
+// Util: make a simple random id
+const rid = () => Math.random().toString(36).slice(2, 10);
+
+app.post('/api/generate', async (req, res) => {
+  try {
+    const { apiKey, model = 'veo-3', prompt, negativePrompt, durationSeconds = 5, aspectRatio = '9:16', seed = 0, guidanceScale = 7.5 } = req.body || {};
+    if (!apiKey) return res.status(400).json({ error: 'Missing apiKey' });
+    if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
+
+    const jobId = rid();
+    jobs.set(jobId, { status: 'queued', progress: 1, meta: { frames: 0, etaSec: 20, compute: 'T4-ish' } });
+
+    // Fire-and-forget async job
+    (async () => {
+      try {
+        jobs.set(jobId, { status: 'running', progress: 10, meta: { frames: 0, etaSec: 18, compute: 'T4-ish' } });
+
+        // =====================
+        // TODO: Call your Veo 3 endpoint here.
+        // Example shape (PSEUDOCODE - replace with real endpoint):
+        // const init = await fetch('https://<your-veo-endpoint>', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+        //   body: JSON.stringify({ model, prompt, negative_prompt: negativePrompt, duration: durationSeconds, aspect_ratio: aspectRatio, seed, guidance_scale: guidanceScale })
+        // });
+        // const initJson = await init.json();
+        // const remoteJobId = initJson.id;
+
+        // For demo we simulate progression
+        let pct = 10;
+        for (let i = 0; i < 8; i++) {
+          await new Promise((r) => setTimeout(r, 1500));
+          pct += 10 + Math.round(Math.random() * 5);
+          if (pct > 95) pct = 95;
+          jobs.set(jobId, { status: 'running', progress: pct, meta: { frames: 24 * ((i+1) * (durationSeconds/2)), etaSec: Math.max(2, 12 - i*1.2), compute: 'T4-ish' } });
         }
 
-        /**
-         * Fungsi untuk mereset form dan output
-         */
-        function resetAll() {
-            form.reset();
-            promptOutputEl.textContent = 'Hasil prompt akan muncul di sini...';
-            jsonOutputEl.textContent = 'Output JSON akan muncul di sini...';
-            yamlOutputEl.textContent = 'Output YAML akan muncul di sini...';
-        }
+        // When done, you should download the file bytes from the real API
+        // and stash them. Here we just generate a tiny MP4 placeholder.
+        const placeholder = await makeTinyMP4();
+        jobs.set(jobId, { status: 'done', progress: 100, file: placeholder, meta: { frames: 24 * durationSeconds, etaSec: 0, compute: 'T4-ish' } });
+      } catch (err) {
+        jobs.set(jobId, { status: 'error', progress: 0, error: err?.message || 'job failed' });
+      }
+    })();
 
-        /**
-         * Fungsi untuk menyalin teks ke clipboard
-         * @param {string} elementId - ID dari elemen <pre> yang isinya akan disalin
-         */
-        function copyToClipboard(elementId) {
-            const element = document.getElementById(elementId);
-            const textToCopy = element.textContent;
-            
-            // Buat textarea sementara untuk proses penyalinan
-            const tempTextArea = document.createElement('textarea');
-            tempTextArea.value = textToCopy;
-            document.body.appendChild(tempTextArea);
-            tempTextArea.select();
-            
-            try {
-                document.execCommand('copy');
-                // Beri feedback visual
-                const copyButton = element.previousElementSibling.querySelector('.copy-btn');
-                const copyButtonText = copyButton.querySelector('.copy-btn-text');
-                const originalText = copyButtonText.textContent;
-                copyButtonText.textContent = 'Tersalin!';
-                copyButton.classList.add('bg-green-600');
-                
-                setTimeout(() => {
-                    copyButtonText.textContent = originalText;
-                    copyButton.classList.remove('bg-green-600');
-                }, 2000);
+    res.json({ jobId });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Server error' });
+  }
+});
 
-            } catch (err) {
-                console.error('Gagal menyalin teks: ', err);
-            }
-            
-            document.body.removeChild(tempTextArea);
-        }
+app.get('/api/status/:id', (req, res) => {
+  const j = jobs.get(req.params.id);
+  if (!j) return res.status(404).json({ error: 'not found' });
+  const { status, progress, meta, error } = j;
+  res.json({ status, progress, meta, error });
+});
 
-        // Tambahkan event listener ke tombol
-        generateBtn.addEventListener('click', generateOutputs);
-        resetBtn.addEventListener('click', resetAll);
+app.get('/api/file/:id', (req, res) => {
+  const j = jobs.get(req.params.id);
+  if (!j || j.status !== 'done' || !j.file) return res.status(404).json({ error: 'not ready' });
+  res.setHeader('Content-Type', 'video/mp4');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(j.file);
+});
 
-        // Tambahkan event listener global untuk tombol salin (delegasi event)
-        // Ini diperlukan karena fungsi copyToClipboard dipanggil dari atribut onclick di HTML
-        window.copyToClipboard = copyToClipboard;
+// --- utils ---
+async function makeTinyMP4() {
+  // A super tiny 1px mp4 so the UI flow works before you wire the real API.
+  // Replace this with the bytes you download from the Veo 3 API.
+  const base64 = 'AAAAHGZ0eXBpc28yAAAAAGlzbzJpc28yYXZjMQAAAAhmcmVlAAAAIG1kYXQAAAABAAEAAQABAAAAAQAAAP//AAACAAACAAABAAAAAA==';
+  return Buffer.from(base64, 'base64');
+}
 
-    </script>
-</body>
-</html>
+const PORT = process.env.PORT || 8787;
+app.listen(PORT, () => console.log('Veo proxy listening on http://localhost:' + PORT));
+`}
+          </pre><p className="text-sm text-gray-600 mt-3">
+        ⚠️ Replace the <strong>TODO</strong> with the official Veo 3 API call (Vertex AI / Gemini API) when available for your account, then pipe the video bytes to <code>jobs.get(jobId).file</code>.
+      </p>
+    </Card>
+
+    <footer className="text-xs text-gray-500 text-center pb-6">Made for quick prototyping • Tailwind-ready • No build step required here</footer>
+  </div>
+</div>
+
+); }
+
