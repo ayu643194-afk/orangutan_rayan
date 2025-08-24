@@ -1,410 +1,405 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+<!doctype html>
 
-/**
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Veo 3 Video Generator</title>
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { color-scheme: dark light; }
+    .sr-only { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0 }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-slate-100">
+  <div class="max-w-4xl mx-auto p-4 sm:p-8">
+    <header class="mb-6">
+      <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">Veo <span class="text-indigo-400">3</span> Video Generator</h1>
+      <p class="text-slate-300 mt-2">Single-file HTML. Masukkan API key Anda, tulis prompt, dan hasilkan video. <span class="opacity-80">(Client-only demo — untuk produksi sebaiknya lewat server proxy.)</span></p>
+    </header><main class="grid gap-6">
 
-Veo 3 Video Generator — Full Stack Template
+  <!-- API Key & Model Card -->
+  <section class="bg-slate-900/60 backdrop-blur rounded-2xl shadow-xl ring-1 ring-white/10 p-4 sm:p-6">
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div>
+        <label class="block text-sm font-medium mb-1" for="apiKey">API Key</label>
+        <div class="relative">
+          <input id="apiKey" type="password" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2 pr-12" placeholder="sk-..." autocomplete="off" />
+          <button id="toggleKey" type="button" class="absolute inset-y-0 right-2 my-auto text-xs px-2 py-1 rounded-lg bg-slate-700/70 hover:bg-slate-700">Lihat</button>
+        </div>
+        <div class="mt-2 flex items-center gap-3 text-xs text-slate-400">
+          <label class="inline-flex items-center gap-2"><input id="rememberKey" type="checkbox" class="accent-indigo-400" /> Simpan di perangkat ini</label>
+          <span class="hidden sm:inline">•</span>
+          <button id="clearKey" type="button" class="text-rose-300 hover:underline">Hapus yang tersimpan</button>
+        </div>
+      </div>
 
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-medium mb-1" for="model">Model</label>
+          <select id="model" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2">
+            <option value="veo-3">veo-3</option>
+            <option value="veo-3.1">veo-3.1</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="endpointMode">Mode Endpoint</label>
+          <select id="endpointMode" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2">
+            <option value="oneshot">One‑shot (sinkron)</option>
+            <option value="jobs">Jobs (antrian + polling)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </section>
 
----
+  <!-- Prompt & Options Card -->
+  <section class="bg-slate-900/60 backdrop-blur rounded-2xl shadow-xl ring-1 ring-white/10 p-4 sm:p-6">
+    <div class="grid gap-4">
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <label class="block text-sm font-medium" for="prompt">Prompt</label>
+          <button id="examplesBtn" type="button" class="text-xs text-indigo-300 hover:underline">Pilih contoh</button>
+        </div>
+        <textarea id="prompt" class="w-full min-h-[130px] rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2" placeholder="Contoh: A cinematic 5‑second shot of a tiny orange cat chef flipping a pancake in a cozy kitchen, soft morning light, shallow depth of field, handheld feel, natural motion."></textarea>
+        <div class="mt-1 text-right text-xs text-slate-400"><span id="charCount">0</span> karakter</div>
+      </div>
 
-What you get:
+      <div class="grid sm:grid-cols-3 gap-3">
+        <div>
+          <label class="block text-sm font-medium mb-1" for="duration">Durasi (detik)</label>
+          <input id="duration" type="number" min="1" max="20" step="1" value="5" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="ratio">Rasio</label>
+          <select id="ratio" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2">
+            <option value="16:9">16:9 (Landscape)</option>
+            <option value="9:16">9:16 (Portrait)</option>
+            <option value="1:1">1:1 (Square)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="resolution">Resolusi</label>
+          <select id="resolution" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2">
+            <option value="720p">1280×720 (720p)</option>
+            <option value="1080p">1920×1080 (1080p)</option>
+            <option value="4k">3840×2160 (4K)</option>
+          </select>
+        </div>
+      </div>
 
-1. Frontend (this React component): a clean UI with an API Key field,
-
-
-
-prompt input, model options, progress, preview, and download.
-
-2. Backend (Node.js/Express) code is included below as a code block
-
-
-
-string you can copy into server.js. It exposes routes:
-
-- POST /api/generate   -> starts a video job
-
-- GET  /api/status/:id -> polls job status
-
-- GET  /api/file/:id   -> streams the finished video
-
-Why a backend? Veo 3 currently requires a server-side call. Putting your
-
-key directly in the browser can expose it and also run into CORS limits.
-
-This template keeps the API key in the browser but **sends it to your own
-
-backend per request**, so you can rotate/validate it, or replace with
-
-service-account auth later without touching the UI.
-
-Hook up the backend, deploy both together, and you're good.\n
-
-NOTE: The backend includes a minimal stub for Veo 3. Replace the marked
-
-TODO section with the actual call to your chosen Veo 3 endpoint (Vertex AI
-
-or Gemini API) and map responses to the unified shape used here. */
-
-
-// ---------- Simple UI Primitives ---------- const Label = ({ htmlFor, children }) => ( <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-700 mb-1"> {children} </label> );
-
-const Input = (props) => ( <input {...props} className={"w-full rounded-2xl border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-black/10 shadow-sm " + (props.className || "")} /> );
-
-const Textarea = (props) => (
-
-  <textarea
-    {...props}
-    className={"w-full rounded-2xl border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-black/10 shadow-sm min-h-[120px] " +
-      (props.className || "")}
-  />
-);
-
-const Select = (props) => (
-  <select
-    {...props}
-    className={"w-full rounded-2xl border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-black/10 shadow-sm bg-white " +
-      (props.className || "")}
-  />
-);
-
-const Button = ({ children, className = "", ...props }) => (
-  <button
-    {...props}
-    className={`rounded-2xl px-4 py-2 font-medium shadow-sm border border-black/10 hover:shadow transition ${className}`}
-  >
-    {children}
-  </button>
-);
-
-const Card = ({ children, className = "" }) => (
-  <div className={`rounded-3xl border border-black/10 p-5 shadow-sm bg-white ${className}`}>{children}</div>
-);
-
-// ---------- Helpers ----------
-const prettyBytes = (bytes) => {
-  if (!Number.isFinite(bytes)) return "-";
-  const units = ["B", "KB", "MB", "GB"]; let i = 0;
-  while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
-  return `${bytes.toFixed(1)} ${units[i]}`;
-};
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// ---------- Main Component ----------
-export default function App() {
-  const [apiKey, setApiKey] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [negativePrompt, setNegativePrompt] = useState("");
-  const [duration, setDuration] = useState(5);
-  const [aspect, setAspect] = useState("9:16");
-  const [seed, setSeed] = useState(0);
-  const [guidance, setGuidance] = useState(7.5);
-  const [model, setModel] = useState("veo-3");
-
-  const [jobId, setJobId] = useState(null);
-  const [status, setStatus] = useState("idle"); // idle | queued | running | done | error
-  const [progress, setProgress] = useState(0); // 0..100
-  const [error, setError] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
-  const [meta, setMeta] = useState(null);
-
-  const canGenerate = apiKey && prompt && status !== "running" && status !== "queued";
-
-  const handleGenerate = useCallback(async () => {
-    setError("");
-    setStatus("queued");
-    setProgress(1);
-    setVideoUrl("");
-    setMeta(null);
-
-    try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          apiKey,
-          model,
-          prompt,
-          negativePrompt,
-          durationSeconds: Number(duration),
-          aspectRatio: aspect,
-          seed: Number(seed) || 0,
-          guidanceScale: Number(guidance) || 7.5,
-        }),
-      });
-
-      if (!res.ok) throw new Error(`Generate failed: ${res.status}`);
-      const data = await res.json();
-      setJobId(data.jobId);
-      setStatus("running");
-      setProgress(5);
-
-      // Poll
-      let done = false;
-      let lastPct = 5;
-      while (!done) {
-        const s = await fetch(`/api/status/${encodeURIComponent(data.jobId)}`);
-        if (!s.ok) throw new Error(`Status failed: ${s.status}`);
-        const state = await s.json();
-        setStatus(state.status);
-        setProgress(state.progress ?? lastPct);
-        lastPct = state.progress ?? lastPct;
-        setMeta(state.meta || null);
-        if (state.status === "done") {
-          done = true;
-          setProgress(100);
-          break;
-        }
-        if (state.status === "error") {
-          throw new Error(state.error || "Unknown job error");
-        }
-        await sleep(2000);
-      }
-
-      const f = await fetch(`/api/file/${encodeURIComponent(data.jobId)}`);
-      if (!f.ok) throw new Error(`Download failed: ${f.status}`);
-      const blob = await f.blob();
-      const url = URL.createObjectURL(blob);
-      setVideoUrl(url);
-    } catch (e) {
-      console.error(e);
-      setError(e.message || String(e));
-      setStatus("error");
-    }
-  }, [apiKey, model, prompt, negativePrompt, duration, aspect, seed, guidance]);
-
-  const reset = useCallback(() => {
-    setJobId(null);
-    setStatus("idle");
-    setProgress(0);
-    setVideoUrl("");
-    setError("");
-    setMeta(null);
-  }, []);
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <header className="flex items-center justify-between">
-          <h1 className="text-2xl md:text-3xl font-bold">Veo 3 Video Generator</h1>
-          <div className="text-sm text-gray-500">Single-file app • API Key ready</div>
-        </header>
-
-        <Card>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <Label htmlFor="apiKey">API Key</Label>
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder="paste your key here"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
-            <div>
-              <Label htmlFor="model">Model</Label>
-              <Select id="model" value={model} onChange={(e) => setModel(e.target.value)}>
-                <option value="veo-3">veo-3</option>
-                <option value="veo-3-creative">veo-3-creative</option>
-                <option value="veo-3-fast">veo-3-fast</option>
-              </Select>
-            </div>
-            <div className="md:col-span-2">
-              <Label htmlFor="prompt">Prompt</Label>
-              <Textarea
-                id="prompt"
-                placeholder="Describe the video you want (Bahasa Indonesia juga bisa)"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-              />
-            </div>
-            <div className="md:col-span-2">
-              <Label htmlFor="negative">Negative Prompt (optional)</Label>
-              <Input id="negative" value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="things to avoid" />
-            </div>
-            <div>
-              <Label htmlFor="duration">Duration (sec)</Label>
-              <Input id="duration" type="number" min={1} max={60} value={duration} onChange={(e) => setDuration(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="aspect">Aspect Ratio</Label>
-              <Select id="aspect" value={aspect} onChange={(e) => setAspect(e.target.value)}>
-                <option value="9:16">9:16 (Shorts/TikTok)</option>
-                <option value="16:9">16:9 (Landscape)</option>
-                <option value="1:1">1:1 (Square)</option>
-                <option value="4:5">4:5 (Portrait)</option>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="seed">Seed</Label>
-              <Input id="seed" type="number" value={seed} onChange={(e) => setSeed(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="guidance">Guidance Scale</Label>
-              <Input id="guidance" type="number" step="0.1" min={1} max={20} value={guidance} onChange={(e) => setGuidance(e.target.value)} />
-            </div>
+      <details class="group open:bg-slate-900/40 rounded-xl">
+        <summary class="cursor-pointer list-none px-3 py-2 rounded-xl ring-1 ring-white/10 bg-slate-800/70 hover:bg-slate-800/90 flex items-center justify-between">
+          <span class="text-sm font-medium">Opsi Lanjutan</span>
+          <span class="text-xs text-slate-300 group-open:hidden">buka</span>
+          <span class="text-xs text-slate-300 hidden group-open:inline">tutup</span>
+        </summary>
+        <div class="p-3 grid sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-sm font-medium mb-1" for="seed">Seed (opsional)</label>
+            <input id="seed" type="number" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2" placeholder="mis. 12345" />
           </div>
-
-          <div className="mt-4 flex items-center gap-3">
-            <Button onClick={handleGenerate} disabled={!canGenerate} className={`bg-black text-white ${!canGenerate ? "opacity-50 cursor-not-allowed" : ""}`}>
-              {status === "running" || status === "queued" ? "Generating…" : "Generate"}
-            </Button>
-            <Button onClick={reset} className="bg-white">Reset</Button>
-            {error && <span className="text-sm text-red-600">{error}</span>}
+          <div>
+            <label class="block text-sm font-medium mb-1" for="fps">FPS</label>
+            <input id="fps" type="number" min="8" max="60" step="1" value="24" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2" />
           </div>
-
-          <div className="mt-6">
-            <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full bg-black/80" style={{ width: `${progress}%` }} />
-            </div>
-            <div className="mt-2 text-sm text-gray-600 flex items-center justify-between">
-              <span>Status: {status}</span>
-              {meta?.compute && (
-                <span>Compute: {meta.compute} • Frames: {meta.frames} • Est: {meta.etaSec}s</span>
-              )}
-            </div>
+          <div class="flex items-end">
+            <label class="inline-flex items-center gap-2 text-sm"><input id="safeMode" type="checkbox" class="accent-indigo-400" checked /> Aktifkan Safe Mode</label>
           </div>
-        </Card>
+        </div>
+      </details>
+    </div>
+  </section>
 
-        <Card>
-          <h2 className="text-lg font-semibold mb-3">Result</h2>
-          {videoUrl ? (
-            <div className="space-y-3">
-              <video src={videoUrl} controls className="w-full rounded-2xl" />
-              <div className="flex gap-3">
-                <a href={videoUrl} download={`veo3_${jobId || "video"}.mp4`}>
-                  <Button className="bg-black text-white">Download MP4</Button>
-                </a>
-                <Button onClick={() => { navigator.clipboard.writeText(prompt); }} className="bg-white">Copy Prompt</Button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-sm text-gray-500">No video yet. Fill the form and press Generate.</div>
-          )}
-        </Card>
+  <!-- Actions & Status Card -->
+  <section class="bg-slate-900/60 backdrop-blur rounded-2xl shadow-xl ring-1 ring-white/10 p-4 sm:p-6">
+    <div class="flex flex-wrap items-center gap-3">
+      <button id="generateBtn" class="px-4 py-2 rounded-2xl bg-indigo-500 hover:bg-indigo-600 active:scale-[.99] font-semibold">Generate</button>
+      <button id="cancelBtn" class="px-4 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 font-medium">Batal</button>
+      <span id="status" class="text-sm text-slate-300"></span>
+    </div>
+    <div class="mt-4">
+      <div class="h-2 w-full rounded-full bg-slate-800 ring-1 ring-white/10 overflow-hidden">
+        <div id="progress" class="h-2 w-0 bg-indigo-400 transition-all"></div>
+      </div>
+    </div>
+  </section>
 
-        <Card>
-          <h3 className="font-semibold mb-2">How to run</h3>
-          <ol className="list-decimal ml-5 space-y-1 text-sm text-gray-700">
-            <li>Create a new project folder and run <code>npm init -y</code></li>
-            <li>Install deps: <code>npm i express node-fetch@3</code></li>
-            <li>Create <code>server.js</code> using the code below, then <code>node server.js</code></li>
-            <li>Serve this React app with any dev server (Vite/Next) or export to static and proxy to <code>http://localhost:8787</code> (default)</li>
-            <li>Paste your API key in the UI. Hit Generate.</li>
-          </ol>
-        </Card>
+  <!-- Output Card -->
+  <section class="bg-slate-900/60 backdrop-blur rounded-2xl shadow-xl ring-1 ring-white/10 p-4 sm:p-6">
+    <h2 class="text-lg font-semibold mb-3">Hasil</h2>
+    <div id="output" class="grid gap-3">
+      <div id="thumb" class="aspect-video rounded-xl bg-slate-800 ring-1 ring-white/10 grid place-items-center text-slate-400">
+        Belum ada video.
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a id="downloadBtn" class="hidden px-4 py-2 rounded-2xl bg-emerald-500 hover:bg-emerald-600 font-semibold" download>Unduh Video</a>
+        <button id="copyCurl" class="px-4 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 font-medium">Copy cURL</button>
+      </div>
+      <pre id="log" class="text-xs bg-slate-950/60 ring-1 ring-white/10 rounded-xl p-3 overflow-auto max-h-64"></pre>
+    </div>
+  </section>
 
-        <Card>
-          <h3 className="font-semibold mb-2">Backend (server.js)</h3>
-          <pre className="whitespace-pre-wrap text-xs bg-gray-50 p-4 rounded-2xl border border-gray-200 overflow-auto">
-{`
-/**
- * Minimal Veo 3 proxy for browser apps
- * ------------------------------------
- * This Express server receives an API key from the client PER REQUEST and
- * calls your Veo 3 endpoint. Replace the marked TODO with the real call and
- * normalize the response to the unified shapes below.
- *
- * Start:   node server.js
- */
+  <!-- Footer -->
+  <footer class="text-xs text-slate-400 text-center pt-2">
+    <p>Tip: untuk keamanan, sembunyikan API key di server Anda. File ini hanya contoh.</p>
+  </footer>
+</main>
 
-import express from 'express';
-import fetch from 'node-fetch';
+  </div>  <script>
+    // ====== Utilities ======
+    const $ = sel => document.querySelector(sel);
+    const log = (...args) => {
+      const line = args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 2)).join(' ');
+      const pre = $('#log');
+      pre.textContent += (pre.textContent ? '\n' : '') + line;
+      pre.scrollTop = pre.scrollHeight;
+      console.log(...args);
+    };
 
-const app = express();
-app.use(express.json({ limit: '2mb' }));
+    const ui = {
+      apiKey: $('#apiKey'),
+      toggleKey: $('#toggleKey'),
+      rememberKey: $('#rememberKey'),
+      clearKey: $('#clearKey'),
+      model: $('#model'),
+      endpointMode: $('#endpointMode'),
+      prompt: $('#prompt'),
+      charCount: $('#charCount'),
+      duration: $('#duration'),
+      ratio: $('#ratio'),
+      resolution: $('#resolution'),
+      seed: $('#seed'),
+      fps: $('#fps'),
+      safeMode: $('#safeMode'),
+      generateBtn: $('#generateBtn'),
+      cancelBtn: $('#cancelBtn'),
+      status: $('#status'),
+      progress: $('#progress'),
+      thumb: $('#thumb'),
+      downloadBtn: $('#downloadBtn'),
+      copyCurl: $('#copyCurl'),
+      examplesBtn: $('#examplesBtn'),
+    };
 
-// In-memory job store for demo
-const jobs = new Map();
+    // ====== State ======
+    let aborter = null;
 
-// Util: make a simple random id
-const rid = () => Math.random().toString(36).slice(2, 10);
-
-app.post('/api/generate', async (req, res) => {
-  try {
-    const { apiKey, model = 'veo-3', prompt, negativePrompt, durationSeconds = 5, aspectRatio = '9:16', seed = 0, guidanceScale = 7.5 } = req.body || {};
-    if (!apiKey) return res.status(400).json({ error: 'Missing apiKey' });
-    if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
-
-    const jobId = rid();
-    jobs.set(jobId, { status: 'queued', progress: 1, meta: { frames: 0, etaSec: 20, compute: 'T4-ish' } });
-
-    // Fire-and-forget async job
-    (async () => {
-      try {
-        jobs.set(jobId, { status: 'running', progress: 10, meta: { frames: 0, etaSec: 18, compute: 'T4-ish' } });
-
-        // =====================
-        // TODO: Call your Veo 3 endpoint here.
-        // Example shape (PSEUDOCODE - replace with real endpoint):
-        // const init = await fetch('https://<your-veo-endpoint>', {
-        //   method: 'POST',
-        //   headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-        //   body: JSON.stringify({ model, prompt, negative_prompt: negativePrompt, duration: durationSeconds, aspect_ratio: aspectRatio, seed, guidance_scale: guidanceScale })
-        // });
-        // const initJson = await init.json();
-        // const remoteJobId = initJson.id;
-
-        // For demo we simulate progression
-        let pct = 10;
-        for (let i = 0; i < 8; i++) {
-          await new Promise((r) => setTimeout(r, 1500));
-          pct += 10 + Math.round(Math.random() * 5);
-          if (pct > 95) pct = 95;
-          jobs.set(jobId, { status: 'running', progress: pct, meta: { frames: 24 * ((i+1) * (durationSeconds/2)), etaSec: Math.max(2, 12 - i*1.2), compute: 'T4-ish' } });
-        }
-
-        // When done, you should download the file bytes from the real API
-        // and stash them. Here we just generate a tiny MP4 placeholder.
-        const placeholder = await makeTinyMP4();
-        jobs.set(jobId, { status: 'done', progress: 100, file: placeholder, meta: { frames: 24 * durationSeconds, etaSec: 0, compute: 'T4-ish' } });
-      } catch (err) {
-        jobs.set(jobId, { status: 'error', progress: 0, error: err?.message || 'job failed' });
-      }
+    // Load/save key
+    (function initKey() {
+      const saved = localStorage.getItem('veo3_api_key');
+      if (saved) { ui.apiKey.value = saved; ui.rememberKey.checked = true; }
     })();
+    ui.rememberKey.addEventListener('change', () => {
+      if (!ui.rememberKey.checked) localStorage.removeItem('veo3_api_key');
+      else if (ui.apiKey.value) localStorage.setItem('veo3_api_key', ui.apiKey.value);
+    });
+    ui.apiKey.addEventListener('input', () => {
+      if (ui.rememberKey.checked) localStorage.setItem('veo3_api_key', ui.apiKey.value);
+    });
+    ui.toggleKey.addEventListener('click', () => {
+      const t = ui.apiKey; t.type = t.type === 'password' ? 'text' : 'password'; ui.toggleKey.textContent = t.type === 'password' ? 'Lihat' : 'Sembunyi';
+    });
+    ui.clearKey.addEventListener('click', () => { localStorage.removeItem('veo3_api_key'); ui.apiKey.value=''; });
 
-    res.json({ jobId });
-  } catch (e) {
-    res.status(500).json({ error: e?.message || 'Server error' });
-  }
-});
+    // Character counter
+    const updateCount = () => ui.charCount.textContent = ui.prompt.value.length;
+    ui.prompt.addEventListener('input', updateCount); updateCount();
 
-app.get('/api/status/:id', (req, res) => {
-  const j = jobs.get(req.params.id);
-  if (!j) return res.status(404).json({ error: 'not found' });
-  const { status, progress, meta, error } = j;
-  res.json({ status, progress, meta, error });
-});
+    // Examples
+    const EXAMPLES = [
+      'A cinematic 5-second shot of a tiny orange cat chef flipping a pancake in a cozy kitchen, soft morning light, shallow depth of field, handheld feel, natural motion.',
+      'Drone flythrough of a futuristic neon city at night after rain, reflections on wet streets, volumetric light beams, gentle camera roll, 24 fps, 8 seconds.',
+      'Macro close-up of dew forming on a leaf at sunrise, time-lapse feel, bokeh background, natural color grading, slow push-in.'
+    ];
+    ui.examplesBtn.addEventListener('click', () => {
+      const choice = EXAMPLES[Math.floor(Math.random()*EXAMPLES.length)];
+      ui.prompt.value = choice; updateCount();
+    });
 
-app.get('/api/file/:id', (req, res) => {
-  const j = jobs.get(req.params.id);
-  if (!j || j.status !== 'done' || !j.file) return res.status(404).json({ error: 'not ready' });
-  res.setHeader('Content-Type', 'video/mp4');
-  res.setHeader('Cache-Control', 'no-store');
-  res.send(j.file);
-});
+    // ====== Networking helpers (Replace with real Veo 3 endpoints) ======
+    // IMPORTANT: Ganti nilai URL di bawah ini dengan endpoint resmi penyedia API Veo 3 Anda.
+    // Beberapa penyedia menggunakan endpoint sinkron (mengembalikan file video langsung),
+    // yang lain menggunakan pola job (kembali jobId, lalu dipolling sampai selesai).
 
-// --- utils ---
-async function makeTinyMP4() {
-  // A super tiny 1px mp4 so the UI flow works before you wire the real API.
-  // Replace this with the bytes you download from the Veo 3 API.
-  const base64 = 'AAAAHGZ0eXBpc28yAAAAAGlzbzJpc28yYXZjMQAAAAhmcmVlAAAAIG1kYXQAAAABAAEAAQABAAAAAQAAAP//AAACAAACAAABAAAAAA==';
-  return Buffer.from(base64, 'base64');
-}
+    const CONFIG = {
+      // --- MODE A: One-shot (sinkron) ---
+      ONESHOT_URL: 'https://YOUR_PROVIDER_EXAMPLE/v1/video:generate', // ganti!
+      // --- MODE B: Jobs (antrian) ---
+      JOBS_CREATE_URL: 'https://YOUR_PROVIDER_EXAMPLE/v1/video:submit', // ganti!
+      JOBS_STATUS_URL: id => `https://YOUR_PROVIDER_EXAMPLE/v1/video/jobs/${id}`, // ganti!
+    };
 
-const PORT = process.env.PORT || 8787;
-app.listen(PORT, () => console.log('Veo proxy listening on http://localhost:' + PORT));
-`}
-          </pre><p className="text-sm text-gray-600 mt-3">
-        ⚠️ Replace the <strong>TODO</strong> with the official Veo 3 API call (Vertex AI / Gemini API) when available for your account, then pipe the video bytes to <code>jobs.get(jobId).file</code>.
-      </p>
-    </Card>
+    function buildPayload() {
+      const ratio = ui.ratio.value; // e.g. '16:9'
+      const [w, h] = (() => {
+        if (ui.resolution.value === '4k') return ratio === '9:16' ? [2160, 3840] : ratio === '1:1' ? [2160, 2160] : [3840, 2160];
+        if (ui.resolution.value === '1080p') return ratio === '9:16' ? [1080, 1920] : ratio === '1:1' ? [1080, 1080] : [1920, 1080];
+        return ratio === '9:16' ? [720, 1280] : ratio === '1:1' ? [720, 720] : [1280, 720];
+      })();
+      const payload = {
+        model: ui.model.value,
+        prompt: ui.prompt.value.trim(),
+        duration_seconds: Number(ui.duration.value) || 5,
+        width: w,
+        height: h,
+        fps: Number(ui.fps.value) || 24,
+        safety_check: !!ui.safeMode.checked,
+      };
+      if (ui.seed.value) payload.seed = Number(ui.seed.value);
+      return payload;
+    }
 
-    <footer className="text-xs text-gray-500 text-center pb-6">Made for quick prototyping • Tailwind-ready • No build step required here</footer>
-  </div>
-</div>
+    function buildHeaders() {
+      const key = ui.apiKey.value.trim();
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`,
+      };
+    }
 
-); }
+    function setBusy(busy) {
+      ui.generateBtn.disabled = busy;
+      ui.cancelBtn.disabled = !busy;
+      ui.progress.style.width = busy ? '12%' : '0%';
+      ui.status.textContent = busy ? 'Memproses…' : '';
+    }
 
+    function setThumb(node) {
+      ui.thumb.innerHTML = '';
+      ui.thumb.appendChild(node);
+    }
+
+    async function fetchBlob(url, opt) {
+      const res = await fetch(url, opt);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      return await res.blob();
+    }
+
+    function toCurl(url, method, headers, bodyObj) {
+      const h = Object.entries(headers).map(([k, v]) => `-H ${JSON.stringify(k + ': ' + v)}`).join(' ');
+      const d = bodyObj ? `--data ${JSON.stringify(JSON.stringify(bodyObj))}` : '';
+      return `curl -X ${method} ${h} ${d} ${JSON.stringify(url)}`;
+    }
+
+    // ====== Generate handlers ======
+    ui.generateBtn.addEventListener('click', async () => {
+      try {
+        const key = ui.apiKey.value.trim();
+        if (!key) return alert('Masukkan API key terlebih dahulu.');
+        if (!ui.prompt.value.trim()) return alert('Prompt tidak boleh kosong.');
+
+        setBusy(true); ui.downloadBtn.classList.add('hidden'); ui.log.textContent = '';
+        aborter = new AbortController();
+
+        const payload = buildPayload();
+        const headers = buildHeaders();
+        const mode = ui.endpointMode.value;
+
+        log('Payload:', payload);
+
+        if (mode === 'oneshot') {
+          const url = CONFIG.ONESHOT_URL;
+          ui.progress.style.width = '25%';
+          log('POST', url);
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload),
+            signal: aborter.signal,
+          });
+
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+
+          // Beberapa penyedia mengirim JSON berisi link; yang lain kirim file langsung.
+          const ctype = res.headers.get('content-type') || '';
+          if (ctype.includes('application/json')) {
+            ui.progress.style.width = '45%';
+            const data = await res.json();
+            log('Response JSON:', data);
+            const videoUrl = data.output_url || data.result_url || data.video_url;
+            if (!videoUrl) throw new Error('Tidak ada URL video pada respons.');
+            ui.progress.style.width = '60%';
+            const blob = await fetchBlob(videoUrl, { signal: aborter.signal });
+            handleVideoBlob(blob);
+          } else {
+            ui.progress.style.width = '60%';
+            const blob = await res.blob();
+            handleVideoBlob(blob);
+          }
+        } else {
+          // Jobs mode: create -> poll -> download
+          const createUrl = CONFIG.JOBS_CREATE_URL;
+          log('POST', createUrl);
+          const createRes = await fetch(createUrl, {
+            method: 'POST', headers, body: JSON.stringify(payload), signal: aborter.signal,
+          });
+          if (!createRes.ok) throw new Error(`${createRes.status} ${createRes.statusText}`);
+          const job = await createRes.json();
+          log('Job created:', job);
+          const jobId = job.id || job.job_id || job.task_id;
+          if (!jobId) throw new Error('Respons tidak memiliki job id.');
+          ui.progress.style.width = '35%';
+
+          // Polling
+          let done = false, tries = 0, maxTries = 120; // sampai ~2 menit jika interval 1s
+          while (!done && !aborter.signal.aborted && tries < maxTries) {
+            await new Promise(r => setTimeout(r, 1000)); tries++;
+            const statusUrl = CONFIG.JOBS_STATUS_URL(jobId);
+            const sRes = await fetch(statusUrl, { headers, signal: aborter.signal });
+            if (!sRes.ok) throw new Error(`${sRes.status} ${sRes.statusText}`);
+            const s = await sRes.json();
+            const st = (s.status || s.state || '').toLowerCase();
+            const prog = s.progress || s.percent || 0;
+            ui.progress.style.width = `${Math.min(90, Math.max(40, prog))}%`;
+            ui.status.textContent = `Status: ${st || 'processing'}…`;
+            log('Job status:', s);
+            if (['done','completed','succeeded','success','finished'].includes(st)) {
+              const videoUrl = s.output_url || s.result_url || (s.result && s.result.url);
+              if (!videoUrl) throw new Error('Selesai, tetapi URL video tidak ditemukan.');
+              const blob = await fetchBlob(videoUrl, { signal: aborter.signal });
+              handleVideoBlob(blob); done = true; break;
+            }
+            if (['failed','error','canceled','cancelled'].includes(st)) {
+              throw new Error(`Job gagal: ${st}`);
+            }
+          }
+          if (!done && tries >= maxTries) throw new Error('Polling timeout.');
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') { log('Dibatalkan oleh pengguna.'); ui.status.textContent = 'Dibatalkan.'; }
+        else { console.error(err); log('Error:', err.message || String(err)); ui.status.textContent = 'Gagal.'; }
+      } finally {
+        setBusy(false); aborter = null; ui.progress.style.width = '100%'; setTimeout(()=> ui.progress.style.width='0%', 600);
+      }
+    });
+
+    // Cancel
+    ui.cancelBtn.addEventListener('click', () => { if (aborter) aborter.abort(); });
+
+    // Handle video
+    function handleVideoBlob(blob) {
+      const url = URL.createObjectURL(blob);
+      const video = document.createElement('video');
+      video.controls = true; video.muted = true; video.playsInline = true; video.src = url;
+      video.className = 'rounded-xl ring-1 ring-white/10 w-full';
+      setThumb(video);
+      ui.downloadBtn.href = url;
+      ui.downloadBtn.download = `veo3_${Date.now()}.mp4`;
+      ui.downloadBtn.classList.remove('hidden');
+      ui.status.textContent = 'Selesai.';
+    }
+
+    // Copy cURL
+    ui.copyCurl.addEventListener('click', async () => {
+      const payload = buildPayload();
+      const headers = buildHeaders();
+      const url = ui.endpointMode.value === 'oneshot' ? CONFIG.ONESHOT_URL : CONFIG.JOBS_CREATE_URL;
+      const cmd = toCurl(url, 'POST', headers, payload);
+      await navigator.clipboard.writeText(cmd);
+      ui.copyCurl.textContent = 'Copied!'; setTimeout(()=> ui.copyCurl.textContent='Copy cURL', 1200);
+    });
+  </script></body>
+</html>
