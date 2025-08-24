@@ -91,5 +91,75 @@ async function generateVideo() {
     document.getElementById('status').innerText = '⚠️ Error: ' + err.message;
   }
 }
+</script>
+async function generateVideo() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) return alert('Masukkan API Key Gemini dulu!');
+
+  const prompt = document.getElementById('prompt').value;
+  const duration = parseInt(document.getElementById('duration').value);
+  const aspectRatio = document.getElementById('ratio').value;
+  const resolution = document.getElementById('resolution').value;
+
+  const statusEl = document.getElementById('status');
+  const videoEl = document.getElementById('video');
+
+  statusEl.textContent = '⏳ Mengirim request...';
+
+  try {
+    // 1. Submit request ke Gemini Veo-3
+    let res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-generate-preview:predict?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        instances: [{ prompt }],
+        parameters: {
+          aspectRatio,
+          durationSeconds: duration,
+          resolution,
+          generateAudio: false
+        }
+      })
+    });
+
+    let data = await res.json();
+    console.log('Submit response:', data);
+
+    if (!data.name) {
+      statusEl.textContent = '❌ Gagal: ' + JSON.stringify(data);
+      return;
+    }
+
+    const operationId = data.name;
+    statusEl.textContent = '⏳ Video sedang diproses...';
+
+    // 2. Polling status sampai selesai
+    let videoUrl = null;
+    while (true) {
+      let poll = await fetch(`https://generativelanguage.googleapis.com/v1beta/operations/${operationId}?key=${apiKey}`);
+      let pollData = await poll.json();
+      console.log('Polling:', pollData);
+
+      if (pollData.done) {
+        if (pollData.response && pollData.response.videos && pollData.response.videos.length > 0) {
+          videoUrl = pollData.response.videos[0].uri;
+        }
+        break;
+      }
+      await new Promise(r => setTimeout(r, 5000)); // tunggu 5 detik
+    }
+
+    if (videoUrl) {
+      statusEl.textContent = '✅ Video siap!';
+      videoEl.src = videoUrl;
+    } else {
+      statusEl.textContent = '❌ Video gagal dihasilkan.';
+    }
+
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = '⚠️ Error: ' + err.message;
+  }
+}
 </script></body>
 </html>
