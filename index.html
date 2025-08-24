@@ -1,405 +1,95 @@
-<!doctype html>
-
-<html lang="id">
+<!DOCTYPE html><html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Veo 3 Video Generator</title>
-  <!-- Tailwind CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    :root { color-scheme: dark light; }
-    .sr-only { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0 }
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    textarea, input, select, button { margin: 8px 0; padding: 6px; width: 100%; max-width: 600px; }
+    video { margin-top: 15px; max-width: 100%; border: 1px solid #ccc; border-radius: 8px; }
+    .status { margin-top: 10px; font-weight: bold; }
   </style>
 </head>
-<body class="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-slate-100">
-  <div class="max-w-4xl mx-auto p-4 sm:p-8">
-    <header class="mb-6">
-      <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">Veo <span class="text-indigo-400">3</span> Video Generator</h1>
-      <p class="text-slate-300 mt-2">Single-file HTML. Masukkan API key Anda, tulis prompt, dan hasilkan video. <span class="opacity-80">(Client-only demo — untuk produksi sebaiknya lewat server proxy.)</span></p>
-    </header><main class="grid gap-6">
+<body>
+  <h2>🎬 Veo 3 Video Generator (Gemini API Key)</h2><label>Masukkan API Key Gemini:</label> <input type="text" id="apiKey" placeholder="AIza..." />
 
-  <!-- API Key & Model Card -->
-  <section class="bg-slate-900/60 backdrop-blur rounded-2xl shadow-xl ring-1 ring-white/10 p-4 sm:p-6">
-    <div class="grid gap-4 sm:grid-cols-2">
-      <div>
-        <label class="block text-sm font-medium mb-1" for="apiKey">API Key</label>
-        <div class="relative">
-          <input id="apiKey" type="password" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2 pr-12" placeholder="sk-..." autocomplete="off" />
-          <button id="toggleKey" type="button" class="absolute inset-y-0 right-2 my-auto text-xs px-2 py-1 rounded-lg bg-slate-700/70 hover:bg-slate-700">Lihat</button>
-        </div>
-        <div class="mt-2 flex items-center gap-3 text-xs text-slate-400">
-          <label class="inline-flex items-center gap-2"><input id="rememberKey" type="checkbox" class="accent-indigo-400" /> Simpan di perangkat ini</label>
-          <span class="hidden sm:inline">•</span>
-          <button id="clearKey" type="button" class="text-rose-300 hover:underline">Hapus yang tersimpan</button>
-        </div>
-      </div>
+<label>Prompt:</label>
 
-      <div class="grid sm:grid-cols-2 gap-3">
-        <div>
-          <label class="block text-sm font-medium mb-1" for="model">Model</label>
-          <select id="model" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2">
-            <option value="veo-3.0-generate-preview">veo-3</option>
-            <option value="veo-3.1">veo-3.1</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1" for="endpointMode">Mode Endpoint</label>
-          <select id="endpointMode" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2">
-            <option value="oneshot">One‑shot (sinkron)</option>
-            <option value="jobs">Jobs (antrian + polling)</option>
-          </select>
-        </div>
-      </div>
-    </div>
-  </section>
+  <textarea id="prompt" rows="4" placeholder="Describe your video..."></textarea><label>Durasi (detik):</label> <input type="number" id="duration" value="8" />
 
-  <!-- Prompt & Options Card -->
-  <section class="bg-slate-900/60 backdrop-blur rounded-2xl shadow-xl ring-1 ring-white/10 p-4 sm:p-6">
-    <div class="grid gap-4">
-      <div>
-        <div class="flex items-center justify-between mb-1">
-          <label class="block text-sm font-medium" for="prompt">Prompt</label>
-          <button id="examplesBtn" type="button" class="text-xs text-indigo-300 hover:underline">Pilih contoh</button>
-        </div>
-        <textarea id="prompt" class="w-full min-h-[130px] rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2" placeholder="Contoh: A cinematic 5‑second shot of a tiny orange cat chef flipping a pancake in a cozy kitchen, soft morning light, shallow depth of field, handheld feel, natural motion."></textarea>
-        <div class="mt-1 text-right text-xs text-slate-400"><span id="charCount">0</span> karakter</div>
-      </div>
+<label>Aspect Ratio:</label> <select id="ratio"> <option value="16:9">16:9</option> <option value="9:16">9:16</option> <option value="1:1">1:1</option> </select>
 
-      <div class="grid sm:grid-cols-3 gap-3">
-        <div>
-          <label class="block text-sm font-medium mb-1" for="duration">Durasi (detik)</label>
-          <input id="duration" type="number" min="1" max="20" step="1" value="5" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1" for="ratio">Rasio</label>
-          <select id="ratio" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2">
-            <option value="16:9">16:9 (Landscape)</option>
-            <option value="9:16">9:16 (Portrait)</option>
-            <option value="1:1">1:1 (Square)</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1" for="resolution">Resolusi</label>
-          <select id="resolution" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2">
-            <option value="720p">1280×720 (720p)</option>
-            <option value="1080p">1920×1080 (1080p)</option>
-            <option value="4k">3840×2160 (4K)</option>
-          </select>
-        </div>
-      </div>
+<label>Resolusi:</label> <select id="resolution"> <option value="720p">720p</option> <option value="1080p" selected>1080p</option> <option value="4k">4K</option> </select>
 
-      <details class="group open:bg-slate-900/40 rounded-xl">
-        <summary class="cursor-pointer list-none px-3 py-2 rounded-xl ring-1 ring-white/10 bg-slate-800/70 hover:bg-slate-800/90 flex items-center justify-between">
-          <span class="text-sm font-medium">Opsi Lanjutan</span>
-          <span class="text-xs text-slate-300 group-open:hidden">buka</span>
-          <span class="text-xs text-slate-300 hidden group-open:inline">tutup</span>
-        </summary>
-        <div class="p-3 grid sm:grid-cols-3 gap-3">
-          <div>
-            <label class="block text-sm font-medium mb-1" for="seed">Seed (opsional)</label>
-            <input id="seed" type="number" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2" placeholder="mis. 12345" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1" for="fps">FPS</label>
-            <input id="fps" type="number" min="8" max="60" step="1" value="24" class="w-full rounded-xl bg-slate-800/80 ring-1 ring-white/10 focus:ring-2 focus:ring-indigo-400 px-3 py-2" />
-          </div>
-          <div class="flex items-end">
-            <label class="inline-flex items-center gap-2 text-sm"><input id="safeMode" type="checkbox" class="accent-indigo-400" checked /> Aktifkan Safe Mode</label>
-          </div>
-        </div>
-      </details>
-    </div>
-  </section>
+<button onclick="generateVideo()">🚀 Generate Video</button>
 
-  <!-- Actions & Status Card -->
-  <section class="bg-slate-900/60 backdrop-blur rounded-2xl shadow-xl ring-1 ring-white/10 p-4 sm:p-6">
-    <div class="flex flex-wrap items-center gap-3">
-      <button id="generateBtn" class="px-4 py-2 rounded-2xl bg-indigo-500 hover:bg-indigo-600 active:scale-[.99] font-semibold">Generate</button>
-      <button id="cancelBtn" class="px-4 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 font-medium">Batal</button>
-      <span id="status" class="text-sm text-slate-300"></span>
-    </div>
-    <div class="mt-4">
-      <div class="h-2 w-full rounded-full bg-slate-800 ring-1 ring-white/10 overflow-hidden">
-        <div id="progress" class="h-2 w-0 bg-indigo-400 transition-all"></div>
-      </div>
-    </div>
-  </section>
+  <div class="status" id="status"></div>
+  <video id="video" controls></video><script>
+async function generateVideo() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) return alert('Masukkan API Key Gemini dulu!');
 
-  <!-- Output Card -->
-  <section class="bg-slate-900/60 backdrop-blur rounded-2xl shadow-xl ring-1 ring-white/10 p-4 sm:p-6">
-    <h2 class="text-lg font-semibold mb-3">Hasil</h2>
-    <div id="output" class="grid gap-3">
-      <div id="thumb" class="aspect-video rounded-xl bg-slate-800 ring-1 ring-white/10 grid place-items-center text-slate-400">
-        Belum ada video.
-      </div>
-      <div class="flex flex-wrap gap-3">
-        <a id="downloadBtn" class="hidden px-4 py-2 rounded-2xl bg-emerald-500 hover:bg-emerald-600 font-semibold" download>Unduh Video</a>
-        <button id="copyCurl" class="px-4 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 font-medium">Copy cURL</button>
-      </div>
-      <pre id="log" class="text-xs bg-slate-950/60 ring-1 ring-white/10 rounded-xl p-3 overflow-auto max-h-64"></pre>
-    </div>
-  </section>
+  const prompt = document.getElementById('prompt').value;
+  const duration = parseInt(document.getElementById('duration').value);
+  const aspectRatio = document.getElementById('ratio').value;
+  const resolution = document.getElementById('resolution').value;
 
-  <!-- Footer -->
-  <footer class="text-xs text-slate-400 text-center pt-2">
-    <p>Tip: untuk keamanan, sembunyikan API key di server Anda. File ini hanya contoh.</p>
-  </footer>
-</main>
+  document.getElementById('status').innerText = '⏳ Mengirim request...';
 
-  </div>  <script>
-    // ====== Utilities ======
-    const $ = sel => document.querySelector(sel);
-    const log = (...args) => {
-      const line = args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 2)).join(' ');
-      const pre = $('#log');
-      pre.textContent += (pre.textContent ? '\n' : '') + line;
-      pre.scrollTop = pre.scrollHeight;
-      console.log(...args);
-    };
-
-    const ui = {
-      apiKey: $('#apiKey'),
-      toggleKey: $('#toggleKey'),
-      rememberKey: $('#rememberKey'),
-      clearKey: $('#clearKey'),
-      model: $('#model'),
-      endpointMode: $('#endpointMode'),
-      prompt: $('#prompt'),
-      charCount: $('#charCount'),
-      duration: $('#duration'),
-      ratio: $('#ratio'),
-      resolution: $('#resolution'),
-      seed: $('#seed'),
-      fps: $('#fps'),
-      safeMode: $('#safeMode'),
-      generateBtn: $('#generateBtn'),
-      cancelBtn: $('#cancelBtn'),
-      status: $('#status'),
-      progress: $('#progress'),
-      thumb: $('#thumb'),
-      downloadBtn: $('#downloadBtn'),
-      copyCurl: $('#copyCurl'),
-      examplesBtn: $('#examplesBtn'),
-    };
-
-    // ====== State ======
-    let aborter = null;
-
-    // Load/save key
-    (function initKey() {
-      const saved = localStorage.getItem('veo3_api_key');
-      if (saved) { ui.apiKey.value = saved; ui.rememberKey.checked = true; }
-    })();
-    ui.rememberKey.addEventListener('change', () => {
-      if (!ui.rememberKey.checked) localStorage.removeItem('veo3_api_key');
-      else if (ui.apiKey.value) localStorage.setItem('veo3_api_key', ui.apiKey.value);
-    });
-    ui.apiKey.addEventListener('input', () => {
-      if (ui.rememberKey.checked) localStorage.setItem('veo3_api_key', ui.apiKey.value);
-    });
-    ui.toggleKey.addEventListener('click', () => {
-      const t = ui.apiKey; t.type = t.type === 'password' ? 'text' : 'password'; ui.toggleKey.textContent = t.type === 'password' ? 'Lihat' : 'Sembunyi';
-    });
-    ui.clearKey.addEventListener('click', () => { localStorage.removeItem('veo3_api_key'); ui.apiKey.value=''; });
-
-    // Character counter
-    const updateCount = () => ui.charCount.textContent = ui.prompt.value.length;
-    ui.prompt.addEventListener('input', updateCount); updateCount();
-
-    // Examples
-    const EXAMPLES = [
-      'A cinematic 5-second shot of a tiny orange cat chef flipping a pancake in a cozy kitchen, soft morning light, shallow depth of field, handheld feel, natural motion.',
-      'Drone flythrough of a futuristic neon city at night after rain, reflections on wet streets, volumetric light beams, gentle camera roll, 24 fps, 8 seconds.',
-      'Macro close-up of dew forming on a leaf at sunrise, time-lapse feel, bokeh background, natural color grading, slow push-in.'
-    ];
-    ui.examplesBtn.addEventListener('click', () => {
-      const choice = EXAMPLES[Math.floor(Math.random()*EXAMPLES.length)];
-      ui.prompt.value = choice; updateCount();
-    });
-
-    // ====== Networking helpers (Replace with real Veo 3 endpoints) ======
-    // IMPORTANT: Ganti nilai URL di bawah ini dengan endpoint resmi penyedia API Veo 3 Anda.
-    // Beberapa penyedia menggunakan endpoint sinkron (mengembalikan file video langsung),
-    // yang lain menggunakan pola job (kembali jobId, lalu dipolling sampai selesai).
-
-    const CONFIG = {
-      // --- MODE A: One-shot (sinkron) ---
-      ONESHOT_URL: 'https://YOUR_PROVIDER_EXAMPLE/v1/video:generate', // ganti!
-      // --- MODE B: Jobs (antrian) ---
-      JOBS_CREATE_URL: 'https://YOUR_PROVIDER_EXAMPLE/v1/video:submit', // ganti!
-      JOBS_STATUS_URL: id => `https://YOUR_PROVIDER_EXAMPLE/v1/video/jobs/${id}`, // ganti!
-    };
-
-    function buildPayload() {
-      const ratio = ui.ratio.value; // e.g. '16:9'
-      const [w, h] = (() => {
-        if (ui.resolution.value === '4k') return ratio === '9:16' ? [2160, 3840] : ratio === '1:1' ? [2160, 2160] : [3840, 2160];
-        if (ui.resolution.value === '1080p') return ratio === '9:16' ? [1080, 1920] : ratio === '1:1' ? [1080, 1080] : [1920, 1080];
-        return ratio === '9:16' ? [720, 1280] : ratio === '1:1' ? [720, 720] : [1280, 720];
-      })();
-      const payload = {
-        model: ui.model.value,
-        prompt: ui.prompt.value.trim(),
-        duration_seconds: Number(ui.duration.value) || 5,
-        width: w,
-        height: h,
-        fps: Number(ui.fps.value) || 24,
-        safety_check: !!ui.safeMode.checked,
-      };
-      if (ui.seed.value) payload.seed = Number(ui.seed.value);
-      return payload;
-    }
-
-    function buildHeaders() {
-      const key = ui.apiKey.value.trim();
-      return {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`,
-      };
-    }
-
-    function setBusy(busy) {
-      ui.generateBtn.disabled = busy;
-      ui.cancelBtn.disabled = !busy;
-      ui.progress.style.width = busy ? '12%' : '0%';
-      ui.status.textContent = busy ? 'Memproses…' : '';
-    }
-
-    function setThumb(node) {
-      ui.thumb.innerHTML = '';
-      ui.thumb.appendChild(node);
-    }
-
-    async function fetchBlob(url, opt) {
-      const res = await fetch(url, opt);
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      return await res.blob();
-    }
-
-    function toCurl(url, method, headers, bodyObj) {
-      const h = Object.entries(headers).map(([k, v]) => `-H ${JSON.stringify(k + ': ' + v)}`).join(' ');
-      const d = bodyObj ? `--data ${JSON.stringify(JSON.stringify(bodyObj))}` : '';
-      return `curl -X ${method} ${h} ${d} ${JSON.stringify(url)}`;
-    }
-
-    // ====== Generate handlers ======
-    ui.generateBtn.addEventListener('click', async () => {
-      try {
-        const key = ui.apiKey.value.trim();
-        if (!key) return alert('Masukkan API key terlebih dahulu.');
-        if (!ui.prompt.value.trim()) return alert('Prompt tidak boleh kosong.');
-
-        setBusy(true); ui.downloadBtn.classList.add('hidden'); ui.log.textContent = '';
-        aborter = new AbortController();
-
-        const payload = buildPayload();
-        const headers = buildHeaders();
-        const mode = ui.endpointMode.value;
-
-        log('Payload:', payload);
-
-        if (mode === 'oneshot') {
-          const url = CONFIG.ONESHOT_URL;
-          ui.progress.style.width = '25%';
-          log('POST', url);
-
-          const res = await fetch(url, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(payload),
-            signal: aborter.signal,
-          });
-
-          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-
-          // Beberapa penyedia mengirim JSON berisi link; yang lain kirim file langsung.
-          const ctype = res.headers.get('content-type') || '';
-          if (ctype.includes('application/json')) {
-            ui.progress.style.width = '45%';
-            const data = await res.json();
-            log('Response JSON:', data);
-            const videoUrl = data.output_url || data.result_url || data.video_url;
-            if (!videoUrl) throw new Error('Tidak ada URL video pada respons.');
-            ui.progress.style.width = '60%';
-            const blob = await fetchBlob(videoUrl, { signal: aborter.signal });
-            handleVideoBlob(blob);
-          } else {
-            ui.progress.style.width = '60%';
-            const blob = await res.blob();
-            handleVideoBlob(blob);
-          }
-        } else {
-          // Jobs mode: create -> poll -> download
-          const createUrl = CONFIG.JOBS_CREATE_URL;
-          log('POST', createUrl);
-          const createRes = await fetch(createUrl, {
-            method: 'POST', headers, body: JSON.stringify(payload), signal: aborter.signal,
-          });
-          if (!createRes.ok) throw new Error(`${createRes.status} ${createRes.statusText}`);
-          const job = await createRes.json();
-          log('Job created:', job);
-          const jobId = job.id || job.job_id || job.task_id;
-          if (!jobId) throw new Error('Respons tidak memiliki job id.');
-          ui.progress.style.width = '35%';
-
-          // Polling
-          let done = false, tries = 0, maxTries = 120; // sampai ~2 menit jika interval 1s
-          while (!done && !aborter.signal.aborted && tries < maxTries) {
-            await new Promise(r => setTimeout(r, 1000)); tries++;
-            const statusUrl = CONFIG.JOBS_STATUS_URL(jobId);
-            const sRes = await fetch(statusUrl, { headers, signal: aborter.signal });
-            if (!sRes.ok) throw new Error(`${sRes.status} ${sRes.statusText}`);
-            const s = await sRes.json();
-            const st = (s.status || s.state || '').toLowerCase();
-            const prog = s.progress || s.percent || 0;
-            ui.progress.style.width = `${Math.min(90, Math.max(40, prog))}%`;
-            ui.status.textContent = `Status: ${st || 'processing'}…`;
-            log('Job status:', s);
-            if (['done','completed','succeeded','success','finished'].includes(st)) {
-              const videoUrl = s.output_url || s.result_url || (s.result && s.result.url);
-              if (!videoUrl) throw new Error('Selesai, tetapi URL video tidak ditemukan.');
-              const blob = await fetchBlob(videoUrl, { signal: aborter.signal });
-              handleVideoBlob(blob); done = true; break;
-            }
-            if (['failed','error','canceled','cancelled'].includes(st)) {
-              throw new Error(`Job gagal: ${st}`);
-            }
-          }
-          if (!done && tries >= maxTries) throw new Error('Polling timeout.');
+  try {
+    // 1. Submit request ke Gemini Veo-3
+    let res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-generate-preview:predict?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        instances: [{ prompt }],
+        parameters: {
+          aspectRatio,
+          durationSeconds: duration,
+          resolution,
+          generateAudio: false
         }
-      } catch (err) {
-        if (err.name === 'AbortError') { log('Dibatalkan oleh pengguna.'); ui.status.textContent = 'Dibatalkan.'; }
-        else { console.error(err); log('Error:', err.message || String(err)); ui.status.textContent = 'Gagal.'; }
-      } finally {
-        setBusy(false); aborter = null; ui.progress.style.width = '100%'; setTimeout(()=> ui.progress.style.width='0%', 600);
-      }
+      })
     });
 
-    // Cancel
-    ui.cancelBtn.addEventListener('click', () => { if (aborter) aborter.abort(); });
+    let data = await res.json();
+    console.log('Submit response:', data);
 
-    // Handle video
-    function handleVideoBlob(blob) {
-      const url = URL.createObjectURL(blob);
-      const video = document.createElement('video');
-      video.controls = true; video.muted = true; video.playsInline = true; video.src = url;
-      video.className = 'rounded-xl ring-1 ring-white/10 w-full';
-      setThumb(video);
-      ui.downloadBtn.href = url;
-      ui.downloadBtn.download = `veo3_${Date.now()}.mp4`;
-      ui.downloadBtn.classList.remove('hidden');
-      ui.status.textContent = 'Selesai.';
+    if (!data.name) {
+      document.getElementById('status').innerText = '❌ Gagal: ' + JSON.stringify(data);
+      return;
     }
 
-    // Copy cURL
-    ui.copyCurl.addEventListener('click', async () => {
-      const payload = buildPayload();
-      const headers = buildHeaders();
-      const url = ui.endpointMode.value === 'oneshot' ? CONFIG.ONESHOT_URL : CONFIG.JOBS_CREATE_URL;
-      const cmd = toCurl(url, 'POST', headers, payload);
-      await navigator.clipboard.writeText(cmd);
-      ui.copyCurl.textContent = 'Copied!'; setTimeout(()=> ui.copyCurl.textContent='Copy cURL', 1200);
-    });
-  </script></body>
+    const operationId = data.name;
+    document.getElementById('status').innerText = '⏳ Video sedang diproses...';
+
+    // 2. Polling status sampai selesai
+    let videoUrl = null;
+    while (true) {
+      let poll = await fetch(`https://generativelanguage.googleapis.com/v1beta/operations/${operationId}?key=${apiKey}`);
+      let pollData = await poll.json();
+      console.log('Polling:', pollData);
+
+      if (pollData.done) {
+        if (pollData.response && pollData.response.videos && pollData.response.videos.length > 0) {
+          videoUrl = pollData.response.videos[0].uri;
+        }
+        break;
+      }
+      await new Promise(r => setTimeout(r, 5000)); // tunggu 5 detik
+    }
+
+    if (videoUrl) {
+      document.getElementById('status').innerText = '✅ Video siap!';
+      document.getElementById('video').src = videoUrl;
+    } else {
+      document.getElementById('status').innerText = '❌ Video gagal dihasilkan.';
+    }
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById('status').innerText = '⚠️ Error: ' + err.message;
+  }
+}
+</script></body>
 </html>
