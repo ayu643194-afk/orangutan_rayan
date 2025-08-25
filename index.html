@@ -7,7 +7,7 @@
     body { font-family: sans-serif; max-width: 600px; margin: auto; }
     label { display: block; margin-top: 10px; }
     textarea, input, select { width: 100%; padding: 6px; margin-top: 4px; }
-    button { margin-top: 15px; padding: 10px; }
+    button { margin-top: 15px; padding: 10px; cursor: pointer; }
     .status { margin-top: 15px; font-weight: bold; color: darkblue; }
     video { margin-top: 20px; width: 100%; border: 1px solid #ccc; }
   </style>
@@ -78,8 +78,12 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              prompt: { text: prompt },
-              config: { durationSeconds: duration, aspectRatio: ratio, resolution }
+              instances: [{ prompt: prompt }],
+              parameters: {
+                durationSeconds: duration,
+                aspectRatio: ratio,
+                resolution: resolution
+              }
             })
           }
         );
